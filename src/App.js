@@ -1,9 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleMap, LoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 
-// ==============================================
-// Constants & Configuration
-// ==============================================
 const MAP_CONFIG = {
   containerStyle: {
     width: '100%',
@@ -12,7 +9,7 @@ const MAP_CONFIG = {
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
     border: '1px solid rgba(255, 255, 255, 0.1)'
   },
-  defaultCenter: { lat: 30, lng: 0 },
+  defaultCenter: { lat: 0, lng: 0 },
   defaultZoom: 2,
   mapStyles: [
     { elementType: "geometry", stylers: [{ color: "#1d1f21" }] },
@@ -172,9 +169,6 @@ const STYLES = {
   }
 };
 
-// ==============================================
-// Sub-Components
-// ==============================================
 const LoadingOverlay = () => (
   <div style={STYLES.loadingOverlay}>
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
@@ -216,19 +210,13 @@ const RationaleItem = ({ item, index }) => (
   </div>
 );
 
-// ==============================================
-// Main Component
-// ==============================================
 function App() {
-  const [mapCenter, setMapCenter] = useState(MAP_CONFIG.defaultCenter);
-  const [zoom, setZoom] = useState(MAP_CONFIG.defaultZoom);
   const [markers, setMarkers] = useState([]);
   const [selectedMarker, setSelectedMarker] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [rationale, setRationale] = useState([]);
   const [rawResponse, setRawResponse] = useState('');
-  const [loadingPosition, setLoadingPosition] = useState(null);
   const [exampleQueries, setExampleQueries] = useState([]);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
   
@@ -243,7 +231,6 @@ function App() {
         const { examples } = await response.json();
         setExampleQueries(examples);
       } catch (error) {
-        console.error('Failed to load examples:', error);
         setExampleQueries([
           "Famous landmarks in Europe",
           "Active volcanoes worldwide",
@@ -265,33 +252,40 @@ function App() {
     prevSearchQueryRef.current = searchQuery;
   }, [searchQuery, exampleQueries.length]);
 
+  useEffect(() => {
+    if (markers.length > 0) {
+      fitBounds();
+    }
+  }, [markers]);
+
   const fitBounds = useCallback(() => {
     if (!mapRef.current || markers.length === 0) return;
 
     const bounds = new window.google.maps.LatLngBounds();
     markers.forEach(marker => bounds.extend(new window.google.maps.LatLng(marker.lat, marker.lng)));
     
-    markers.length === 1 
-      ? mapRef.current.panTo(markers[0]) 
-      : mapRef.current.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+    if (markers.length === 1) {
+      mapRef.current.setZoom(15);
+      mapRef.current.panTo(markers[0]);
+    } else {
+      mapRef.current.fitBounds(bounds, 50);
+    }
   }, [markers]);
 
   const resetMap = useCallback(() => {
-    setMapCenter(MAP_CONFIG.defaultCenter);
-    setZoom(MAP_CONFIG.defaultZoom);
     setMarkers([]);
     setRationale([]);
     setRawResponse('');
+    if (mapRef.current) {
+      mapRef.current.panTo(MAP_CONFIG.defaultCenter);
+      mapRef.current.setZoom(MAP_CONFIG.defaultZoom);
+    }
   }, []);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || isLoading) return;
 
-    const currentCenter = mapRef.current?.getCenter()?.toJSON() || MAP_CONFIG.defaultCenter;
-    const currentZoom = mapRef.current?.getZoom() || MAP_CONFIG.defaultZoom;
-    
     setIsLoading(true);
-    setLoadingPosition({ center: currentCenter, zoom: currentZoom });
     resetMap();
 
     try {
@@ -315,16 +309,12 @@ function App() {
           reason: loc.reason
         }));
         setMarkers(newMarkers);
-        setMapCenter(newMarkers[0]);
-      } else {
-        alert('No locations found. Resetting to world view.');
       }
     } catch (error) {
       console.error('Search failed:', error);
       resetMap();
     }
     setIsLoading(false);
-    setLoadingPosition(null);
   };
 
   const handleKeyPress = (e) => e.key === 'Enter' && !isLoading && handleSearch();
@@ -366,12 +356,9 @@ function App() {
           <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}>
             <GoogleMap
               mapContainerStyle={MAP_CONFIG.containerStyle}
-              center={loadingPosition?.center || mapCenter}
-              zoom={loadingPosition?.zoom || zoom}
-              onLoad={map => {
-                mapRef.current = map;
-                markers.length > 0 && fitBounds();
-              }}
+              center={MAP_CONFIG.defaultCenter}
+              zoom={MAP_CONFIG.defaultZoom}
+              onLoad={map => mapRef.current = map}
               options={{
                 minZoom: 2,
                 maxZoom: 18,
@@ -381,12 +368,7 @@ function App() {
                 styles: MAP_CONFIG.mapStyles
               }}
             >
-              <style>{`
-                @keyframes spin { 
-                  0% { transform: rotate(0deg); } 
-                  100% { transform: rotate(360deg); } 
-                }
-              `}</style>
+              <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
 
               {isLoading && <LoadingOverlay />}
 
